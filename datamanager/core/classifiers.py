@@ -9,6 +9,7 @@ from datamanager.tools.tools import (
     _CLASSIFICATION_METHODS,
     define_parser
 )
+from datamanager.tools import algos
 
 class Classifier:
 
@@ -24,6 +25,8 @@ class Classifier:
         self.segments = segments
 
         self._classifier_check(segment_properties.keys())
+        self.segment_properties = segment_properties
+        self._classified = []
 
 
     def parser(
@@ -52,7 +55,7 @@ class Classifier:
             kwargs[kk] = eval(kk)
 
         if node in self.nodes and not over_write:
-            raise Exception(f"{node} already exist. To over write the node data use over_write = True.")
+            raise Exception(f"{node} already exists. To over write the node data use over_write = True.")
 
 
         data = parser(io,**kwargs)
@@ -63,8 +66,21 @@ class Classifier:
         self.data[node] = data.rename(columns=mapper,errors='raise')
 
         
-    def classify():
-        pass
+    def classify(self,node):
+        
+        if node in self._classified:
+            print(f"{node} is already classified.")
+            
+        else:
+            function = getattr(algos,self.method)
+            outputs = []
+    
+            for row in self.data[node].itertuples():
+                kwargs = {kk:getattr(row,kk) for kk in self.sets}
+                outputs.append(function(self,**kwargs)['segment'])
+    
+            self.data[node]["segment"] = outputs
+            self._classified.append(node)
 
     @property
     def method(self):
@@ -80,6 +96,14 @@ class Classifier:
     def nodes(self):
         return [*self.data]
 
+    @property
+    def sets(self):
+        return _CLASSIFICATION_METHODS[self.method]
+    
+    @property
+    def segment_ids(self):
+        return list(range(len(self.segments)))
+
     def _classifier_check(self,data):
         
         mapper_need  = _CLASSIFICATION_METHODS[self.method]
@@ -89,7 +113,8 @@ class Classifier:
         if differences:
             raise ValueError(f"{differences} are missed for the mappers.")
 
-    
+
+
 
 
     
