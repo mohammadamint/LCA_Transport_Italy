@@ -9,7 +9,7 @@ db_path = pd.read_excel(r'Database\path.xlsx', index_col=0).loc['MIT_Parco_Circo
 #%%
 st = time()
 data = DataManager(path=db_path, main_file=r'Database\Regioni_parco_circolante.xlsx')        
-d = data.parse(years=2019, regions=['Emilia Romagna'])
+d = data.parse(years=2019, regions=['Abruzzo'])
 nd = time()
 print(f'timing: {nd-st}')
 

@@ -98,31 +98,6 @@ class DataManager:
                 with zip.open(self.reg_table.loc['csv',region]) as myZip:
                     df = pd.read_csv(myZip)
 
-                    start = time()
-                    dataset = Classifier(
-                        method='dis_pow_weight',
-                        segments = ['Utility','Small','Medium','Cross-over','Berlina/SUV','Van'],
-                        segment_properties=dict(
-                            displacement = np.array([1000,1200,1500,2000,3000,2000]),
-                            power = np.array([51,74,110,131,250,110]),
-                            weight = np.array([1400,1900,2000,2200,2600,3200]),
-                            )
-                        )
-
-                    dataset.parser(
-                        io = df,
-                        mapper = {
-                            "cilindrata":"displacement",
-                            "kw": "power",
-                            "massa_complessiva": "weight"
-                            },
-                        node = region,
-                        names = ['tipo_veicolo', 'destinazione', 'uso', 'residenza', 'marca', 'cilindrata', 'alimentazione', 'kw', 'data_immatricolazione', 'classe_euro', 'emissioni_co2', 'massa_complessiva'],
-                        filter = Cleaning_PC
-                    )
-                    dataset.classify(node = region)
-                    end = time()
-
                     print("Leggendo il database della regione {}, avente {} colonne.".format(region,len(df.columns)))
                     
                     if len(df.columns) != 13:
@@ -135,7 +110,6 @@ class DataManager:
                     df['region'] = region
                     df['data']   = pd.to_datetime(df.data)
                     df['year']   = [str(x.year) for x in df['data']]
-                    df['segment'] = dataset.data[region].segment.values
                     
                     # Take the caegories in the column alimentazione (the missing information will be Unknown) and fill it 
                     # with the values from vehicle_type
@@ -188,7 +162,30 @@ class DataManager:
                     
                     df = df.reset_index()
                     df.set_index(index, inplace=True)
-                        
+
+                    dataset = Classifier(
+                        method='dis_pow_weight',
+                        segments = ['Utility','Small','Medium','Cross-over','Berlina/SUV','Van'],
+                        segment_properties=dict(
+                            displacement = np.array([1000,1200,1500,2000,3000,2000]),
+                            power = np.array([51,74,110,131,250,110]),
+                            weight = np.array([1400,1900,2000,2200,2600,3200]),
+                            )
+                        )
+
+                    dataset.parser(
+                        io = df,
+                        mapper = {
+                            "cilindrata":"displacement",
+                            "kW": "power",
+                            "massa complessiva": "weight"
+                            },
+                        node = region,
+                    )
+                    dataset.classify(node = region)                    
+
+                    df['segment'] = dataset.data[region].segment.values
+
                     if count:
                         self.Data = pd.concat([self.Data,df])
                     else:
