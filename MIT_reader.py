@@ -110,7 +110,7 @@ class DataManager:
                         )
 
                     dataset.parser(
-                        io = myZip,
+                        io = df,
                         mapper = {
                             "cilindrata":"displacement",
                             "kw": "power",

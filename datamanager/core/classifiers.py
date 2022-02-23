@@ -42,6 +42,8 @@ class Classifier:
         over_write = False,
         names = None,
     ):
+        if node in self.nodes and not over_write:
+            raise Exception(f"{node} already exists. To over write the node data use over_write = True.")
 
         self._classifier_check(mapper.values())
 
@@ -49,16 +51,14 @@ class Classifier:
             index_col = index_col,
             header = header,
         )
-        parser,extra_kwargs = define_parser(io)
+        if isinstance(io,pd.DataFrame):
+            data = io
+        else:
+            parser,extra_kwargs = define_parser(io)
 
-        for kk in extra_kwargs:
-            kwargs[kk] = eval(kk)
-
-        if node in self.nodes and not over_write:
-            raise Exception(f"{node} already exists. To over write the node data use over_write = True.")
-
-
-        data = parser(io,**kwargs)
+            for kk in extra_kwargs:
+                kwargs[kk] = eval(kk)
+                data = parser(io,**kwargs)
 
         if filter is not None:
             data = filter(data)
