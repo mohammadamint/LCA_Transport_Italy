@@ -9,7 +9,36 @@ import pandas as pd
 import numpy as np
 import zipfile
 from copy import deepcopy as dc
+from time import time
+from datamanager.core.classifiers import Classifier
 
+def Cleaning_PC(PC):
+    '''
+    Function to clean the regional parco circolante files
+    Operating with PC files only
+    '''
+    #DATA FILTERING
+    #Deleteing motorcycles
+    PC = PC.loc[PC["tipo_veicolo"]=='A']
+    #Deleting unwanted usage destination
+    # wanted = ['AUTOVEICOLO USO ESCLUSIVO DI POLIZIA','AUTOVETTURA PER TRASPORTO DI PERSONE','TRAS.SPECIFICO PERSONE PART.CONDIZIONI','AUTOVEIC. TRASP. PROMISCUO PERSONE/COSE']
+    wanted = ['AUTOVETTURA PER TRASPORTO DI PERSONE',]
+    # cond = (PC["destinazione"] == wanted[0]) | (PC["destinazione"] == wanted[1]) | (PC["destinazione"] == wanted[2]) | (PC["destinazione"] == wanted[3])
+    cond = (PC["destinazione"] == wanted[0])
+    PC = PC.loc[cond]
+    #Deleting unwanted columns
+    unwanted_col=['tipo_veicolo', 'destinazione', 'uso', 'residenza', 'marca', 'alimentazione', 'data_immatricolazione', 'classe_euro', 'emissioni_co2']
+    PC = PC.drop(unwanted_col,axis=1)
+    #DATA CLEANING
+    #Eliminating vehicles with wheight>4000 and weight>0
+    PC = PC.loc[(PC["massa_complessiva"]>500) & (PC["massa_complessiva"]<4000)]
+    #Eliminating vehicles with cilindrata > 5000 and nan as value
+    PC = PC.loc[(PC["cilindrata"]>0) & (PC["cilindrata"]<5000)]
+    #Eliminating vehicles with power nan as value
+    PC = PC.loc[(PC['kw']>0)]
+
+    #PC = PC.reset_index(drop=True)
+    return PC
 
 
 class DataManager:
@@ -69,6 +98,31 @@ class DataManager:
                 with zip.open(self.reg_table.loc['csv',region]) as myZip:
                     df = pd.read_csv(myZip)
 
+                    start = time()
+                    dataset = Classifier(
+                        method='dis_pow_weight',
+                        segments = ['Utility','Small','Medium','Cross-over','Berlina/SUV','Van'],
+                        segment_properties=dict(
+                            displacement = np.array([1000,1200,1500,2000,3000,2000]),
+                            power = np.array([51,74,110,131,250,110]),
+                            weight = np.array([1400,1900,2000,2200,2600,3200]),
+                            )
+                        )
+
+                    dataset.parser(
+                        io = myZip,
+                        mapper = {
+                            "cilindrata":"displacement",
+                            "kw": "power",
+                            "massa_complessiva": "weight"
+                            },
+                        node = region,
+                        names = ['tipo_veicolo', 'destinazione', 'uso', 'residenza', 'marca', 'cilindrata', 'alimentazione', 'kw', 'data_immatricolazione', 'classe_euro', 'emissioni_co2', 'massa_complessiva'],
+                        filter = Cleaning_PC
+                    )
+                    dataset.classify(node = region)
+                    end = time()
+
                     print("Leggendo il database della regione {}, avente {} colonne.".format(region,len(df.columns)))
                     
                     if len(df.columns) != 13:
@@ -81,6 +135,7 @@ class DataManager:
                     df['region'] = region
                     df['data']   = pd.to_datetime(df.data)
                     df['year']   = [str(x.year) for x in df['data']]
+                    df['segment'] = dataset.data[region].segment.values
                     
                     # Take the caegories in the column alimentazione (the missing information will be Unknown) and fill it 
                     # with the values from vehicle_type
