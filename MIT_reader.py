@@ -163,6 +163,7 @@ class DataManager:
                     df = df.reset_index()
                     df.set_index(index, inplace=True)
 
+                    print("data classification...")
                     dataset = Classifier(
                         method='dis_pow_weight',
                         segments = ['Utility','Small','Medium','Cross-over','Berlina/SUV','Van'],
