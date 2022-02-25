@@ -90,6 +90,10 @@ class DataManager:
               materials= ['Conventional Material','Lightweight Material']
               ):
         
+        if  isinstance(years,(str,int)):
+            years = [years]
+            
+        years = [str(yy) for yy in years]
         if regions is None:
             regions = list(self.reg_table.columns)
             
@@ -110,6 +114,10 @@ class DataManager:
                     df['region'] = region
                     df['data']   = pd.to_datetime(df.data)
                     df['year']   = [str(x.year) for x in df['data']]
+                    
+                    if years is not None:
+                        df = df[df.year.isin(years)]
+
                     
                     # Take the caegories in the column alimentazione (the missing information will be Unknown) and fill it 
                     # with the values from vehicle_type
@@ -163,29 +171,7 @@ class DataManager:
                     df = df.reset_index()
                     df.set_index(index, inplace=True)
 
-                    print("data classification...")
-                    dataset = Classifier(
-                        method='dis_pow_weight',
-                        segments = ['Utility','Small','Medium','Cross-over','Berlina/SUV','Van'],
-                        segment_properties=dict(
-                            displacement = np.array([1000,1200,1500,2000,3000,2000]),
-                            power = np.array([51,74,110,131,250,110]),
-                            weight = np.array([1400,1900,2000,2200,2600,3200]),
-                            )
-                        )
-
-                    dataset.parser(
-                        io = df,
-                        mapper = {
-                            "cilindrata":"displacement",
-                            "kW": "power",
-                            "massa complessiva": "weight"
-                            },
-                        node = region,
-                    )
-                    dataset.classify(node = region)                    
-
-                    df['segment'] = dataset.data[region].segment.values
+                    df = self._cluster(df)
 
                     if count:
                         self.Data = pd.concat([self.Data,df])
@@ -215,6 +201,72 @@ class DataManager:
                 self.found.append(item)
             else:
                 self.not_found.append(item)
+
+    def _cluster(self,data):
+        
+        slicer = (
+            slice(None),
+            slice(None),
+            slice(None),
+            slice(None),
+            slice(None),
+            slice(None),
+            slice(None),
+            slice(None),
+            slice(None),
+            'EV'
+            )
+        data_EV = data.loc[slicer,:]
+        data_ICEV = data.drop(data_EV.index)
+        
+        
+        dataset = Classifier(
+            method='dis_pow_weight',
+            segments = ['Utility','Small','Medium','Cross-over','Berlina/SUV','Van'],
+            segment_properties=dict(
+                displacement = np.array([1000,1200,1500,2000,3000,2000]),
+                power = np.array([51,74,110,131,250,110]),
+                weight = np.array([1400,1900,2000,2200,2600,3200]),
+                )
+            )
+        
+        dataset.parser(
+            io = data_ICEV,
+            mapper = {
+                "cilindrata":"displacement",
+                "kW": "power",
+                "massa complessiva": "weight"
+                },
+            node = "dummy",
+        )
+        dataset.classify(node = "dummy")    
+        
+        
+        
+        dataset0 = Classifier(
+            method='pow_weight',
+            segments = ['Utility','Small','Medium','Cross-over','Berlina/SUV','Van'],
+            segment_properties=dict(
+                power = np.array([51,74,110,131,250,110]),
+                weight = np.array([1400,1900,2000,2200,2600,3200]),
+                )
+            )
+        
+        dataset0.parser(
+            io = data_EV,
+            mapper = {
+                "kW": "power",
+                "massa complessiva": "weight"
+                },
+            node = "dummy",
+        )
+        dataset0.classify("dummy")
+        
+        data_EV['segment'] = dataset0.data['dummy'].segment.values
+        data_ICEV['segment'] = dataset.data['dummy'].segment.values
+        
+        return data_EV.append(data_ICEV)
+        
                 
     def save(self,path,_format):
         formats = ['csv','feather','parquet','html']

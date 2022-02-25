@@ -63,24 +63,29 @@ class Classifier:
         if filter is not None:
             data = filter(data)
 
-        self.data[node] = data.rename(columns=mapper,errors='raise')
+        self.data[node] = data.rename(columns=mapper,errors='raise').loc[:,list(mapper.values())]
 
         
     def classify(self,node):
+
         
         if node in self._classified:
-            print(f"{node} is already classified.")
+            raise ValueError(f"{node} is already classified.")
+
+        function = getattr(algos,self.method)
+        outputs = []
+        
+
+        for row in self.data[node].itertuples():
+            kwargs = {kk:getattr(row,kk) for kk in self.sets}
+            outputs.append(function(self,**kwargs)['segment'])
+                
             
-        else:
-            function = getattr(algos,self.method)
-            outputs = []
-    
-            for row in self.data[node].itertuples():
-                kwargs = {kk:getattr(row,kk) for kk in self.sets}
-                outputs.append(function(self,**kwargs)['segment'])
-    
-            self.data[node]["segment"] = outputs
-            self._classified.append(node)
+        
+
+
+        self.data[node]["segment"] = outputs
+        self._classified.append(node)
 
     @property
     def method(self):

@@ -2,7 +2,8 @@
 import pandas as pd
 
 _CLASSIFICATION_METHODS = {
-    "dis_pow_weight" : ["displacement","power","weight"]
+    "dis_pow_weight" : ["displacement","power","weight"],
+    "pow_weight" : ["power","weight"]
 }
 
 
