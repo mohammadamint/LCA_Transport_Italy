@@ -222,11 +222,11 @@ class DataManager:
         
         dataset = Classifier(
             method='dis_pow_weight',
-            segments = ['Utility','Small','Medium','Cross-over','Berlina/SUV','Van'],
+            segments = ['Utility','Small','Medium','Large','SUV','Other'],
             segment_properties=dict(
-                displacement = np.array([1000,1200,1500,2000,3000,2000]),
-                power = np.array([51,74,110,131,250,110]),
-                weight = np.array([1400,1900,2000,2200,2600,3200]),
+                displacement = np.array([1000,1200,1500,2000,3000,4000]),
+                power = np.array([44,55,110,140,260,350]),
+                weight = np.array([850,960,1300,1600,2000,2500]),
                 )
             )
         
@@ -245,10 +245,10 @@ class DataManager:
         
         dataset0 = Classifier(
             method='pow_weight',
-            segments = ['Utility','Small','Medium','Cross-over','Berlina/SUV','Van'],
+            segments = ['Utility','Small','Medium','Large','SUV','Other'],
             segment_properties=dict(
-                power = np.array([51,74,110,131,250,110]),
-                weight = np.array([1400,1900,2000,2200,2600,3200]),
+                power = np.array([70,100,110,250,230,500]),
+                weight = np.array([1300,1500,1800,2100,2400,3000]),
                 )
             )
         
