@@ -12,31 +12,35 @@ db_path = pd.read_excel(r'Database/path.xlsx', index_col=0).loc['MIT_Parco_Circo
 sn = slice(None)
 st = time()
 data = DataManager(path=db_path, main_file=r'Database/Regioni_parco_circolante.xlsx')        
-data.parse(years=2019, regions=['Lombardia'])
+data.parse(years=2019)
 nd = time()
 print(f'timing: {nd-st}')
 
 ind = data.Data.columns
 #%%
-db = data.Data.loc[(sn,"A",'AUTOVETTURA PER TRASPORTO DI PERSONE',sn,sn,'2019')]
-mkt_share = db['segment'].value_counts()/db['segment'].value_counts().sum()
+database = data.Data.loc[(sn,"A",'AUTOVETTURA PER TRASPORTO DI PERSONE',sn,sn,'2019')]
+mkt_share = database['segment'].value_counts()/database['segment'].value_counts().sum()
 
-dict = {0.0:"Utility",1.0:"Small",2.0:"Medium",3.0:"Cross-over",4.0:"Berlina/SUV",5.0:"Van"}
-db.replace({"segment": dict}, inplace=True)
-db.segment.fillna("I don't know", inplace=True)
-db.index = [db.index.get_level_values(i).fillna('Unknown') for i in range(db.index.nlevels)]
+dict = {0.0:"Utility",1.0:"Small",2.0:"Medium",3.0:"Large",4.0:"SUV",5.0:"Other"}
+database.replace({"segment": dict}, inplace=True)
+database.segment.fillna("I don't know", inplace=True)
+database.index = [database.index.get_level_values(i).fillna('Unknown') for i in range(database.index.nlevels)]
 
+
+#%% Data cleaning
+
+power_trains = ['EV','ICEV']
+segments = ['Utility','Small','Medium','Large','SUV']
+
+db = database.loc[(database.loc[:,'kW']<=600) & 
+                  (database.loc[:,'massa complessiva']<=5000) &
+                  (database.loc[:,'segment'].isin(segments))]
+
+db = db.loc[(sn,sn,sn,sn,sn,sn,power_trains)]
 # segmentation check by power train
 mkt_seg = db.reset_index().set_index(['segment','power train']).groupby(level=[0,1]).sum().loc[:,'count'].unstack().fillna(0)
 mkt_seg_per = mkt_seg / mkt_seg.sum(0).values *100
-#
 
-fig = px.scatter_3d(db.loc['Emilia Romagna'].reset_index(), x='kW', y='massa complessiva', z='cilindrata', 
-                    color='segment', size_max=18, opacity=0.7)
-fig.update_layout(template='plotly_white', font_family='Palatino Linotype',
-                  title='Veicoli Emiliano Romagnoli vrruuuum')
-fig.write_html('Plots\segmentation3d.html')
-fig.show()
 
 #%%
 plt1 = db.reset_index().loc[:,['kW','massa complessiva','segment','power train','cilindrata']]
@@ -45,28 +49,82 @@ fig = px.scatter(plt1, x='kW', y='massa complessiva',
 fig.write_html('Plots\segmentation.html')
 fig.show()
 
-
 #%% Plotting footprints
 
 # Manufacturing
-fig = px.box(db.reset_index(), x="segment", y="Carbon Footprint - Lightweight Material", color="alimentazione")
+fig = px.box(db.reset_index(), x="segment", y="Carbon Footprint - Lightweight Material", color="power train")
 fig.update_traces(quartilemethod="linear") # or "inclusive", or "linear" by default
 fig.update_layout(template='plotly_white', font_family='Palatino Linotype',
                   title='GHG emissions necessary to produce the vehicle per segment and power train [M grCO2e = ton CO2eq]')
-fig.write_html('Plots\GHG_manufacturing_ali.html')
-# fig.show()
+fig.write_html('Plots\GHG_manufacturing.html')
+fig.show()
 
-# Driving
+#%% Driving
 
 db['Driving emissions'] = db.loc[:,'Well to Tank'].fillna(0) + db.loc[:,'Tank to Wheel'].fillna(0) 
-fig = px.box(db.reset_index(), x="segment", y="Driving emissions", color="alimentazione", points='outliers')
+fig = px.box(db.reset_index(), x="segment", y="Driving emissions", color="power train", points='outliers')
 fig.update_traces(quartilemethod="inclusive") # or "inclusive", or "linear" by default
 fig.update_layout(template='plotly_white', font_family='Palatino Linotype',
                   title='GHG emissions necessary to drive 1 km with a vehicle of a specific segment and power train [grCO2e/km]')
-fig.write_html('Plots\GHG_driving_ali.html')
-# fig.show()
+fig.write_html('Plots\GHG_driving.html')
+fig.show()
+
+#%% Building charts
+qnt = [.25,.75]
+
+db_ps = db.reset_index().set_index(['segment','power train'])
+info = ['Manufacturing emissions [kgCO2]','Driving emissions [kgCO2/km]']
+levels = ['Low','Medium','High']
+
+db_lc = pd.DataFrame(0, index=pd.MultiIndex.from_product([power_trains,segments,levels], names=['Power train','Segment','Estimate']), columns=info)
+for i in power_trains:
+    for j in segments:
+        db_lc.loc[(i,j,'Low'),'Manufacturing emissions [kgCO2]'] = db_ps.loc[(j,i)].describe(qnt).loc['{}%'.format(round(100*qnt[0])),'Carbon Footprint - Lightweight Material']/1000
+        db_lc.loc[(i,j,'Medium'),'Manufacturing emissions [kgCO2]'] = db_ps.loc[(j,i)].describe(qnt).loc['50%','Carbon Footprint - Lightweight Material']/1000
+        db_lc.loc[(i,j,'High'),'Manufacturing emissions [kgCO2]'] = db_ps.loc[(j,i)].describe(qnt).loc['{}%'.format(round(100*qnt[1])),'Carbon Footprint - Lightweight Material']/1000
+        db_lc.loc[(i,j,'Low'),'Driving emissions [kgCO2/km]'] = db_ps.loc[(j,i)].describe(qnt).loc['{}%'.format(round(100*qnt[0])),'Driving emissions']/1000
+        db_lc.loc[(i,j,'Medium'),'Driving emissions [kgCO2/km]'] = db_ps.loc[(j,i)].describe(qnt).loc['50%','Driving emissions']/1000
+        db_lc.loc[(i,j,'High'),'Driving emissions [kgCO2/km]'] = db_ps.loc[(j,i)].describe(qnt).loc['{}%'.format(round(100*qnt[1])),'Driving emissions']/1000
 
 
+#%% prova 0
+distance = list(range(1000,75000,1000))
+
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import numpy as np
+
+fil_map = {'Low':None, 'High':'tonexty'}
+col_map = {'EV':'#59C9A5', 'ICEV':'#5B6C5D'}
+colM_map = {'EV':'#56E39F', 'ICEV':'#2E382F'}
+leg_map = {'Utility':True,'Small':False,'Medium':False,'Large':False,'SUV':False}
+
+fig = make_subplots(rows=1, cols=len(segments), subplot_titles=segments, shared_yaxes='all')
+for seg in segments:
+    for pt in power_trains:
+        for est in ['Low','High']:
+            fig.add_trace(go.Scatter(x=distance, y=np.array(distance)*db_lc.loc[(pt,seg,est),'Driving emissions [kgCO2/km]'] + db_lc.loc[(pt,seg,est),'Manufacturing emissions [kgCO2]'], 
+                        fill=fil_map[est], name='{} - {}'.format(pt,est),
+                        line=dict(color=col_map[pt]), showlegend=leg_map[seg], legendgroup=pt,
+                        ), row=1, col=segments.index(seg)+1)
+        fig.add_trace(go.Scatter(x=distance, y=np.array(distance)*db_lc.loc[(pt,seg,'Medium'),'Driving emissions [kgCO2/km]'] + db_lc.loc[(pt,seg,'Medium'),'Manufacturing emissions [kgCO2]'],
+                                line=dict(color=colM_map[pt], dash='dash'), showlegend=leg_map[seg], 
+                                name='{} - {}'.format(pt,'Median'), legendgroup=pt,
+                                ), row=1, col=segments.index(seg)+1) # fill down to xaxis
+fig.update_layout(template='plotly_white', font_family='Palatino Linotype', hovermode='x',
+                  title='How many km do I have to drive to off-set EVs additional manufacturing emission?',
+                  annotations=[go.layout.Annotation(
+                        showarrow=False,
+                        text='Low and high estimate considers the top and bottom 15% of the distribution of 1.6 M vehicles. Assumed emission factor for electricity is 300 grCO2/kWh',
+                        xanchor='left',
+                        x=0, y=-0.05,
+                        yanchor='top',
+                        font_size = 10,
+                        font_family='Palatino Linotype')],
+                  yaxis=dict(title='Manufacturing (in x=0) and driving LCA GHG emissions [kgCO2eq]'))
+fig.write_html('Plots/GHGPBD.html')
+
+fig.show()
 
 #%% Evaluating Median Greehouse Gases Pay-back Distance (GHG PBT)
 GHGPBT_median = db.reset_index().set_index(['region','segment','power train']).groupby(level=[0,1,2]).median()
