@@ -33,11 +33,14 @@ power_trains = ['EV','ICEV']
 segments = ['Utility','Small','Medium','Large','SUV']
 all_seg = ['Utility','Small','Medium','Large','SUV','Other']
 
-db = database.loc[(database.loc[:,'kW']<=600) & 
-                  (database.loc[:,'massa complessiva']<=5000) &
-                  (database.loc[:,'segment'].isin(all_seg))]
+database_ = database.reset_index()
+db = database_.reset_index().loc[(database_.loc[:,'kW']<=600) & 
+                  (database_.loc[:,'massa complessiva']<=5000) &
+                  (database_.loc[:,'segment'].isin(all_seg)) &
+                  ((database_.loc[:,'power train']=='ICEV') & database_.loc[:,'Tank to Wheel'].notna())] # Added to cut out strange ICEV with no TTW emissions
 
-db = db.loc[(sn,sn,sn,sn,sn,sn,power_trains)]
+db.set_index(['region','tipo','destinazione','Uso','data','year','provincia','marca','alimentazione','power train'], inplace=True)
+db = db.loc[(sn,sn,sn,sn,sn,sn,sn,sn,sn,power_trains)]
 # segmentation check by power train
 mkt_seg = db.reset_index().set_index(['segment','power train']).groupby(level=[0,1]).sum().loc[:,'count'].unstack().fillna(0)
 mkt_seg_per = mkt_seg / mkt_seg.sum(0).values *100
@@ -45,12 +48,12 @@ mkt_seg_per = mkt_seg / mkt_seg.sum(0).values *100
 
 #%% Market analysis
 
-fig = px.sunburst(db.loc[(sn,sn,sn,sn,sn,sn,'EV')].reset_index(), path=['marca','segment'])
+fig = px.sunburst(db.loc[(sn,sn,sn,sn,sn,sn,sn,sn,sn,'EV')].reset_index(), path=['marca','segment'])
 fig.show
 
 #%% Brand analysis
 
-fig = px.scatter(db.loc[(sn,sn,sn,sn,sn,sn,'ICEV')].reset_index(),
+fig = px.scatter(db.loc[(sn,sn,sn,sn,sn,sn,sn,sn,sn,'ICEV')].reset_index(),
             x='kW', y='massa complessiva',color='marca',symbol='segment')
 fig.show()
 
@@ -109,6 +112,8 @@ import numpy as np
 fil_map = {'Low':None, 'High':'tonexty'}
 col_map = {'EV':'#d8dbdc', 'ICEV':'#525353'}
 colM_map = {'EV':'#abaeae', 'ICEV':'#3b3c3c'}
+col_mapCOL = {'EV':'#ffd60a', 'ICEV':'#ff4d6d'}
+colM_mapCOL = {'EV':'#ffc300', 'ICEV':'#c9184a'}
 leg_map = {'Utility':True,'Small':False,'Medium':False,'Large':False,'SUV':False}
 
 fig = make_subplots(rows=1, cols=len(segments), subplot_titles=segments, shared_yaxes='all')
@@ -121,18 +126,18 @@ for seg in segments:
                 b = ''
             fig.add_trace(go.Scatter(x=distance, y=np.array(distance)*db_lc.loc[(pt,seg,est),'Driving emissions [kgCO2/km]'] + db_lc.loc[(pt,seg,est),'Manufacturing emissions [kgCO2]'], 
                         fill=fil_map[est], name='{}{} - {}'.format(b,pt,est),
-                        line=dict(color=col_map[pt]), showlegend=leg_map[seg], legendgroup=pt,
+                        line=dict(color=col_mapCOL[pt]), showlegend=leg_map[seg], legendgroup=pt,
                         ), row=1, col=segments.index(seg)+1)
         fig.add_trace(go.Scatter(x=distance, y=np.array(distance)*db_lc.loc[(pt,seg,'Medium'),'Driving emissions [kgCO2/km]'] + db_lc.loc[(pt,seg,'Medium'),'Manufacturing emissions [kgCO2]'],
-                                line=dict(color=colM_map[pt], dash='dash'), showlegend=leg_map[seg], 
+                                line=dict(color=colM_mapCOL[pt], dash='dash'), showlegend=leg_map[seg], 
                                 name='{}{} - {}'.format(b,pt,'Median'), legendgroup=pt,
                                 ), row=1, col=segments.index(seg)+1) # fill down to xaxis
-fig.update_layout(template='plotly_white', font_family='Palatino Linotype', hovermode='x',
+fig.update_layout(template='plotly_white', font_family='HelveticaNeue', hovermode='x',
                   title='How many km do I have to drive to off-set BEVs additional manufacturing emission?',
                   yaxis=dict(title='Manufacturing (in x=0) and driving LCA GHG emissions [kgCO2eq]'))
 
 
-fig.write_html('Plots/GHGPBD.html')
+fig.write_html('Plots/GHGPBD_col.html')
 
 fig.show()
 
@@ -185,11 +190,31 @@ fig.update_layout(template='plotly_white', font_family='Palatino Linotype', hove
 fig.write_html('Plots/PBD.html')
 
 fig.show()
+
+#%%
+fig = make_subplots(rows=1, cols=len(segments), subplot_titles=segments, shared_yaxes='all')
+for seg in segments:
+    for pt in power_trains:
+        for est in ['Low','High']:
+            fig.add_trace(go.Scatter(x=distance, y=np.array(distance)*db_cc.loc[(pt,seg,est),'Driving cost [€/km]'] + db_cc.loc[(pt,seg,est),'Purchase price [€]'], 
+                        fill=fil_map[est], name='{} - {}'.format(pt,est),
+                        line=dict(color=col_mapCOL[pt]), showlegend=leg_map[seg], legendgroup=pt,
+                        ), row=1, col=segments.index(seg)+1)
+        fig.add_trace(go.Scatter(x=distance, y=np.array(distance)*db_cc.loc[(pt,seg,'Medium'),'Driving cost [€/km]'] + db_cc.loc[(pt,seg,'Medium'),'Purchase price [€]'],
+                                line=dict(color=colM_mapCOL[pt], dash='dash'), showlegend=leg_map[seg], 
+                                name='{} - {}'.format(pt,'Median'), legendgroup=pt,
+                                ), row=1, col=segments.index(seg)+1) # fill down to xaxis
+fig.update_layout(template='plotly_white', font_family='Palatino Linotype', hovermode='x',
+                  title='How many km do I have to drive to off-set EVs additional cost?',
+                  yaxis=dict(title='Purchase price (in x=0) and driving costs [€]'))
+fig.write_html('Plots/PBD_col.html')
+
+fig.show()
 #%% Evaluating Median Greehouse Gases Pay-back Distance (GHG PBT)
 GHGPBT_median = db.reset_index().set_index(['region','segment','power train']).groupby(level=[0,1,2]).median()
 
 fig = px.scatter(db.reset_index(), x='Carbon Footprint - Lightweight Material',
-                 y='Driving emissions', color='power train', symbol='segment', hover_data='alimentazione'
+                 y='Driving emissions', color='power train', symbol='segment', hover_name='alimentazione',
                  color_discrete_sequence=['#d8dbdc','#525353'])
 fig.update_layout(template='plotly_white', font_family='Palatino Linotype',
                   title='Driving vs manufacturing emissions for 1.74 million Italian cars')
@@ -203,6 +228,26 @@ fig.update_yaxes(title="<b>Driving emissions</b> = WTT + TTW emissions [grCO2eq/
 fig.update_xaxes(title="<b>Manufacturing emissions</b> [M grCO2eq = tonCO2eq]")
 
 fig.write_html('Plots\Flex.html')
+
+#%%
+GHGPBT_median = db.reset_index().set_index(['region','segment','power train']).groupby(level=[0,1,2]).median()
+
+fig = px.scatter(db.reset_index(), x='Carbon Footprint - Lightweight Material',
+                 y='Driving emissions', color='power train', symbol='segment',
+                 color_discrete_map=colM_mapCOL)
+fig.update_layout(template='plotly_white', font_family='HelveticaNeue',
+                  title='Driving vs manufacturing emissions for 1.74 million Italian cars')
+# fig.show()
+fig.update_traces(marker=dict(size=8,
+                              opacity=0.7,
+                              line=dict(width=2,
+                                        color='DarkSlateGrey')),
+                  selector=dict(mode='markers'))
+fig.update_yaxes(title="<b>Driving emissions</b> = WTT + TTW emissions [grCO2eq/km]")
+fig.update_xaxes(title="<b>Manufacturing emissions</b> [M grCO2eq = tonCO2eq]")
+
+fig.write_html('Plots\Flex_col.html')
+fig.write_image('Plots\Flex_col.svg')
 
 #%% Sample of all the cases
 
